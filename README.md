@@ -1,6 +1,6 @@
 # Finding Drug Targets in Liver Cancer from RNA-seq
 
-> 🚧 Work in progress. Sections marked _TODO_ get filled in as the analysis is done.
+>  Work in progress. Sections marked _TODO_ get filled in as the analysis is done.
 
 **Question:** Which genes are overexpressed in hepatocellular carcinoma (HCC), linked to worse patient survival, *and* realistically druggable?
 
@@ -20,16 +20,35 @@ Hepatocellular carcinoma is the most common primary liver cancer and one of the 
 
 ## Data
 
+## Data
+
 - **Source:** [TCGA-LIHC](https://portal.gdc.cancer.gov/projects/TCGA-LIHC) via the [UCSC Xena GDC hub](https://xenabrowser.net/)
 - **Expression:** STAR gene counts (GENCODE v36)
 - **Clinical:** overall survival, stage, grade
-- **Samples:** primary tumors (`-01`) and solid tissue normal (`-11`); _TODO: fill in exact numbers after QC_
+- **Samples after QC:** 371 primary tumors, 50 adjacent normal liver samples
+- **Genes after filtering:** 22,107 of 60,660 (≥10 counts in ≥50 samples)
 
 Data is not stored in the repo. Run `python -m src.data` to download it into `data/raw/`.
 
 ## Key results
 
-_TODO_ — volcano plot, top pathways, Kaplan–Meier curves, final target table.
+## Key results
+
+### 1. Quality control
+
+Normal liver samples cluster tightly, while tumors are highly heterogeneous, which is expected for HCC.
+
+![PCA](figures/01_pca.png)
+
+Known HCC markers behave as expected (GPC3 and AFP up, CYP2E1 and CYP1A2 down in tumors), confirming sample labels are correct.
+
+![Markers](figures/01_marker_check.png)
+
+**Outlier decisions:** 10 samples were flagged as >3 SD from their group centre on PCA. None were removed:
+- 9 tumors: normal library sizes; they represent the extreme end of tumor heterogeneity, not technical failures.
+- 1 normal (`TCGA-FV-A2QR-11A`): tumor markers within the normal range and mildly reduced CYP genes, consistent with diseased adjacent liver rather than tumor contamination. The removal rule was defined before inspecting the sample. A sensitivity analysis is done in notebook 02.
+
+_More results coming as the analysis progresses._
 
 ## Candidate targets
 
@@ -48,7 +67,7 @@ _TODO_ — volcano plot, top pathways, Kaplan–Meier curves, final target table
 - Normal samples are *adjacent* non-tumor tissue, often from cirrhotic livers, so they are not truly healthy.
 - Bulk RNA-seq mixes tumor, immune and stromal cells; some "tumor" signal may come from non-cancer cells.
 - mRNA expression ≠ protein level ≠ essentiality. Targets here are hypotheses that would need experimental validation.
-- _TODO: add what you find along the way_
+- Median follow-up is only 19.6 months, which limits the statistical power of survival analysis.
 
 ## Reproduce
 
