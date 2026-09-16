@@ -1,0 +1,20 @@
+name: lihc-targets
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - requests
+  - jupyterlab
+  - ipykernel
+  - pip
+  - pip:
+      - pydeseq2        # differential expression (week 1)
+      - lifelines       # survival analysis (week 2)
+      - gseapy          # pathway enrichment (week 2)
+      - adjustText      # readable volcano plot labels

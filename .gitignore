@@ -1,0 +1,13 @@
+# Data (large, re-downloadable with src/data.py)
+data/raw/*
+data/processed/*
+!data/**/.gitkeep
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.DS_Store
+
+# NOTE: figures/ and results/ are intentionally tracked so they show up on GitHub.
