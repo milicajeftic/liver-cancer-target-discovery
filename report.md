@@ -1,7 +1,7 @@
 # Identifying Candidate Drug Targets in Hepatocellular Carcinoma from TCGA RNA-seq Data
 
 **Author:** Milica Jeftic, Bioinformatics, University of Primorska (UP FAMNIT)
-**Status:** In progress. Section 1 (data and quality control) is complete.
+**Status:** In progress. Sections 1–4 (data, quality control, differential expression) are complete.
 
 ---
 
@@ -10,7 +10,7 @@
 1. [Introduction](#1-introduction)
 2. [Data](#2-data)
 3. [Quality control](#3-quality-control)
-4. Differential expression _(coming)_
+4. [Differential expression](#4-differential-expression)
 5. Pathway enrichment _(coming)_
 6. Survival analysis _(coming)_
 7. Druggability assessment _(coming)_
@@ -118,7 +118,7 @@ Samples were flagged if their distance from their group's median position on PC1
 | CYP2E1 | 10.5 | 12.2 | 13.7 | 9.5 |
 | CYP1A2 | 6.0 | 9.0 | 10.9 | 1.7 |
 
-Tumor markers are within the normal range. CYP genes are mildly reduced but still within the range of normal samples. The removal criterion was not met, so the sample was kept. Its profile is consistent with diseased adjacent liver, since TCGA normal samples often come from cirrhotic or inflamed livers. A sensitivity analysis (differential expression with and without this sample) is planned in Section 4.
+Tumor markers are within the normal range. CYP genes are mildly reduced but still within the range of normal samples. The removal criterion was not met, so the sample was kept. Its profile is consistent with diseased adjacent liver, since TCGA normal samples often come from cirrhotic or inflamed livers. A sensitivity analysis in Section 4.4 confirmed that keeping this sample does not affect the differential expression results.
 
 ### 3.6 Marker gene validation
 
@@ -126,12 +126,12 @@ To confirm that sample labels and data processing are correct, four genes with w
 
 ![Marker genes](figures/01_marker_check.png)
 
-| Gene | Role | Expected in tumor | Observed |
-|---|---|---|---|
-| GPC3 | Established HCC biomarker | Higher | ✅ Strongly higher |
-| AFP | Clinical serum marker, elevated in a subset of HCC | Higher in a subset | ✅ High in a subset, many tumor outliers |
-| CYP2E1 | Hepatocyte metabolic enzyme | Lower | ✅ Lower, more variable |
-| CYP1A2 | Hepatocyte metabolic enzyme | Lower | ✅ Strongly lower |
+| Gene | Role | Expected in tumor | Observed | As expected? |
+|---|---|---|---|---|
+| GPC3 | Established HCC biomarker | Higher | Strongly higher | Yes |
+| AFP | Clinical serum marker, elevated in a subset of HCC | Higher in a subset | High in a subset, many tumor outliers | Yes |
+| CYP2E1 | Hepatocyte metabolic enzyme | Lower | Lower, more variable | Yes |
+| CYP1A2 | Hepatocyte metabolic enzyme | Lower | Strongly lower | Yes |
 
 All four genes behave as expected, supporting the correctness of sample labeling.
 
@@ -151,14 +151,95 @@ The dataset passed quality control. No samples were removed. The final dataset f
 
 ---
 
+## 4. Differential expression
+
+_Notebook: `notebooks/02_differential_expression.ipynb`_
+
+### 4.1 Approach
+
+Differential expression between tumor and normal tissue was tested with **PyDESeq2** [4], a Python implementation of DESeq2 [3]. DESeq2 normalizes for sequencing depth, models the natural variability of each gene, and tests whether the tumor–normal difference exceeds that variability. P-values were adjusted for multiple testing with the Benjamini–Hochberg method [5]. Log2 fold changes were shrunk [6] to reduce inflated estimates for genes with low counts or high variability.
+
+Thresholds were set before looking at results: **adjusted p-value < 0.05 and |log2 fold change| > 1** (at least a two-fold change).
+
+Three analyses were run:
+
+| Run | Samples | Design | Purpose |
+|---|---|---|---|
+| A · main | 371 tumor, 50 normal | `~condition` | Main tumor vs normal comparison |
+| B · paired | 50 patients with both tumor and normal | `~patient + condition` | Removes differences between individuals |
+| C · sensitivity | Run A without `TCGA-FV-A2QR-11A` | `~condition` | Tests whether the borderline normal sample affects results |
+
+Genes significant in the same direction in **both A and B** were defined as **robust** and carried forward.
+
+### 4.2 Results
+
+| Run | Up in tumor | Down in tumor |
+|---|---|---|
+| A · all samples | 4,496 | 1,307 |
+| B · paired | 1,859 | 2,872 |
+| **Robust (A and B)** | **1,842** | **1,261** |
+
+![Volcano plot](figures/02_volcano.png)
+
+Run A detected more upregulated genes than run B. Almost all of B's upregulated genes (1,842 of 1,859, 99%) were also found in A, but only 41% of A's were confirmed by B. With 371 tumors, run A has the power to detect genes that are strongly elevated in only a subset of tumors. The paired run, with 50 tumors, mainly detects genes that are elevated in most patients. The robust set is therefore a conservative list of consistently upregulated genes.
+
+### 4.3 Agreement between the main and paired analyses
+
+![Run A vs run B](figures/02_all_vs_paired.png)
+
+Log2 fold changes from runs A and B were correlated (**Pearson r = 0.73**), with the main cloud of genes following the diagonal. Two features lower the correlation:
+
+- **A horizontal streak** of genes with large fold changes in A (log2FC 5–11) but near zero in B. These genes are very highly expressed in a small number of tumors. In the smaller paired analysis the evidence was insufficient, and shrinkage pulled their estimates toward zero. They are excluded from the robust set.
+- **A slight downward shift** of paired fold changes. This is likely caused by normalization being computed on different sample sets (100 vs 421 samples), and it is consistent with run B detecting fewer up and more down genes.
+
+### 4.4 Sensitivity analysis
+
+Removing the borderline normal sample `TCGA-FV-A2QR-11A` (see Section 3.5) had almost no effect:
+
+| Metric | Value |
+|---|---|
+| Correlation of log2FC with vs without the sample | r = 0.9995 |
+| Upregulated genes (with / without) | 4,496 / 4,516 |
+| Overlap of top 200 upregulated genes | 196 / 200 |
+
+The decision to keep the sample did not influence the results.
+
+### 4.5 Top genes and biological interpretation
+
+![Heatmap](figures/02_heatmap.png)
+
+The most significant upregulated genes are dominated by **cell-cycle and proliferation genes** (CDKN3, CDC25C, UBE2T, NUF2, CENPF, SKA1, TROAP), reflecting the uncontrolled cell division of cancer cells.
+
+Several genes with established roles in HCC were recovered without prior selection, supporting the validity of the analysis:
+
+| Gene | Relevance to HCC |
+|---|---|
+| GPC3 | Established HCC biomarker (also used in QC, Section 3.6) |
+| TERT | Telomerase; TERT alterations are among the most frequent genetic events in HCC |
+| IGF2BP1 | RNA-binding oncofetal protein associated with aggressive HCC |
+| HOXA13 | Developmental transcription factor associated with HCC progression |
+| REG3A (HIP/PAP) | Protein originally identified in hepatocellular carcinoma |
+| PLVAP | Marker of tumor blood vessels in HCC; studied as a therapeutic antibody target |
+| MAGEA1 | Cancer-testis antigen, normally restricted to testis |
+
+**Points for the next stages:**
+
+- The genes with the largest fold changes (e.g. LINC01419, AC004080.2) include **non-coding RNAs**, which are not accessible to conventional drugs. They will be removed in the druggability assessment.
+- Some genes with very large fold changes in run A (e.g. PGC, REG1A, REG3A) showed much smaller changes in the paired analysis (log2FC about 4 vs 10), suggesting very high expression in a subset of tumors. Because a good therapeutic target should be elevated in most patients, the **fraction of tumors with expression above the normal range** will be used alongside fold change when ranking candidates.
+
+**Output:** 1,842 robust upregulated genes were saved to `results/de_upregulated_robust.csv` for survival analysis.
+
+---
+
 ## 8. Limitations
 
 - **Adjacent normal is not healthy liver.** Normal samples come from non-tumor tissue of cancer patients, often with cirrhosis or hepatitis. Some tumor-vs-normal differences may be underestimated.
 - **Bulk RNA-seq.** Each sample is a mixture of tumor, immune and stromal cells, so some signal may come from non-cancer cells, and tumor purity varies between samples.
 - **Imbalanced groups.** There are 371 tumors vs 50 normals.
-- **Short follow-up.** A median of 19.6 months limits the statistical power of survival analysis.
-- **mRNA ≠ protein ≠ dependency.** High mRNA expression does not guarantee high protein levels or that the tumor depends on the gene.
+- **Tumor heterogeneity.** Some genes are extremely high in only a subset of tumors. Fold change alone can overstate how broadly a gene is overexpressed.
 - **Short follow-up.** Median follow-up is 19.6 months. With 131 deaths among 365 patients, survival analysis is still reasonably powered, but long-term effects may be missed.
+- **mRNA ≠ protein ≠ dependency.** High mRNA expression does not guarantee high protein levels or that the tumor depends on the gene.
+
 ---
 
 ## 9. References
@@ -167,3 +248,5 @@ The dataset passed quality control. No samples were removed. The final dataset f
 2. Goldman, M. J. et al. Visualizing and interpreting cancer genomics data via the Xena platform. *Nature Biotechnology* 38, 675–678 (2020).
 3. Love, M. I., Huber, W. & Anders, S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. *Genome Biology* 15, 550 (2014).
 4. Muzellec, B., Teleńczuk, M., Cabeli, V. & Andreux, M. PyDESeq2: a python package for bulk RNA-seq differential expression analysis. *Bioinformatics* 39, btad547 (2023).
+5. Benjamini, Y. & Hochberg, Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. *Journal of the Royal Statistical Society: Series B* 57, 289–300 (1995).
+6. Zhu, A., Ibrahim, J. G. & Love, M. I. Heavy-tailed prior distributions for sequence count data: removing the noise and preserving large differences. *Bioinformatics* 35, 2084–2092 (2019).
