@@ -1,0 +1,4 @@
+run,up in tumor,down in tumor
+A · all samples,4496,1307
+B · paired,1859,2872
+robust (A and B),1842,1261

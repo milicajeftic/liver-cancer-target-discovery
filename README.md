@@ -32,8 +32,6 @@ Data is not stored in the repo. Run `python -m src.data` to download it into `da
 
 ## Key results
 
-## Key results
-
 ### 1. Quality control
 
 Normal liver samples cluster tightly, while tumors are highly heterogeneous, which is expected for HCC.
