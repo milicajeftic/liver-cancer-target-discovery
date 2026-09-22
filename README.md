@@ -1,6 +1,6 @@
 # Finding Drug Targets in Liver Cancer from RNA-seq
 
-> **Status:** In progress. 2 of 5 notebooks complete (quality control, differential expression).
+> **Status:** In progress. 3 of 5 notebooks complete (quality control, differential expression).
 
 **Question:** Which genes are overexpressed in hepatocellular carcinoma (HCC), linked to worse patient survival, *and* realistically druggable?
 
