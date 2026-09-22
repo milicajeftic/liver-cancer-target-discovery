@@ -1,7 +1,7 @@
 # Identifying Candidate Drug Targets in Hepatocellular Carcinoma from TCGA RNA-seq Data
 
 **Author:** Milica Jeftic, Bioinformatics, University of Primorska (UP FAMNIT)
-**Status:** In progress. Sections 1–4 (data, quality control, differential expression) are complete.
+**Status:** In progress. Sections 1–5 (data, quality control, differential expression, pathway enrichment) are complete.
 
 ---
 
@@ -11,7 +11,7 @@
 2. [Data](#2-data)
 3. [Quality control](#3-quality-control)
 4. [Differential expression](#4-differential-expression)
-5. Pathway enrichment _(coming)_
+5. [Pathway enrichment](#5-pathway-enrichment)
 6. Survival analysis _(coming)_
 7. Druggability assessment _(coming)_
 8. [Limitations](#8-limitations)
@@ -231,12 +231,90 @@ Several genes with established roles in HCC were recovered without prior selecti
 
 ---
 
+## 5. Pathway enrichment
+
+_Notebook: `notebooks/03_pathway_enrichment.ipynb`_
+
+### 5.1 Approach
+
+Two complementary methods were used to move from individual genes to biological processes:
+
+| Method | Input | Gene sets | Tool |
+|---|---|---|---|
+| **GSEA** (gene set enrichment analysis) [7] | All 22,094 genes ranked by the DESeq2 Wald statistic from run A | MSigDB Hallmark, 50 sets [8] | `gseapy.prerank` [9], 1,000 permutations |
+| **ORA** (over-representation analysis) | Robust up (1,842) and robust down (1,261) genes | Reactome [10] | `gseapy.enrich`, hypergeometric test |
+
+GSEA uses every gene and needs no significance cut-off: it tests whether the genes of a pathway are concentrated at the top (activated in tumor) or bottom (suppressed) of the ranking. ORA tests whether a pathway appears in the robust gene lists more often than expected by chance. For ORA, the **background** was set to all genes tested in the differential expression analysis rather than the whole genome. Otherwise, liver-expressed genes would appear enriched simply because they are expressed in liver. Gene sets were obtained through Enrichr [11]. Pathways with FDR < 0.05 were considered significant.
+
+### 5.2 Hallmark GSEA
+
+![Hallmark GSEA](figures/03_gsea_hallmark.png)
+
+**7 pathways were activated and 23 suppressed** in tumors (FDR < 0.05).
+
+**Activated in tumor:**
+
+| Theme | Pathways | Interpretation |
+|---|---|---|
+| Cell proliferation | E2F Targets (NES 2.78), G2-M Checkpoint, Mitotic Spindle | DNA replication and cell division, largely inactive in normal adult liver |
+| Growth signaling | Myc Targets V1 and V2 | MYC-driven cell growth programs |
+| Wnt/β-catenin | Wnt-beta Catenin Signaling | One of the most frequently altered pathways in HCC (e.g. CTNNB1 mutations) [1] |
+| Other | Spermatogenesis | Overlaps with cell-division genes and includes cancer-testis genes (e.g. MAGEA1, Section 4.5) |
+
+![E2F Targets enrichment plot](figures/03_gsea_plot_up.png)
+
+The E2F Targets enrichment plot shows pathway genes packed at the very top of the ranking, with a sharp early peak in the running enrichment score.
+
+**Suppressed in tumor** — two main themes:
+
+1. **Loss of normal liver function:** Xenobiotic Metabolism, Fatty Acid Metabolism, Bile Acid Metabolism, Adipogenesis, Peroxisome, Coagulation, Complement, Cholesterol Homeostasis, Heme Metabolism, Oxidative Phosphorylation. Tumor cells lose the specialized metabolic functions of hepatocytes, consistent with the reduced CYP2E1 and CYP1A2 expression seen in QC (Section 3.6).
+2. **Immune and inflammatory signaling:** TNF-alpha Signaling via NF-kB (the most strongly suppressed, NES ≈ −3.6), Inflammatory Response, Interferon Gamma and Alpha Response, IL-6/JAK/STAT3, IL-2/STAT5, Allograft Rejection, TGF-beta Signaling.
+
+The immune signal should be interpreted with care. It is likely driven by two factors:
+
+- **Tissue composition.** Adjacent "normal" liver in HCC patients often has chronic hepatitis or cirrhosis and is rich in immune cells, while many HCC tumors have relatively few immune cells.
+- **Tissue-handling stress in normal samples.** The TNF-alpha/NF-kB gene set contains immediate-early stress-response genes that are induced within minutes of tissue removal. One of these, CSRNP1, is among the most downregulated genes in the ranking, suggesting part of this signal may reflect sample handling rather than tumor biology.
+
+### 5.3 Reactome ORA
+
+![Reactome ORA](figures/03_ora_reactome.png)
+
+**82 Reactome pathways were enriched among robust up genes and 122 among robust down genes** (adjusted p < 0.05).
+
+- **Up genes** are dominated by cell-cycle pathways: Cell Cycle Checkpoints (71/255 genes), Cell Cycle, Mitotic (103/496), Resolution of Sister Chromatid Cohesion, Mitotic Spindle Checkpoint, and kinetochore signaling. **Unwinding of DNA** stands out: all 11 genes of this small pathway, the MCM replicative helicase complex, are upregulated, giving a very high odds ratio (254).
+- **Down genes** are dominated by liver metabolism: Biological Oxidations, Drug ADME, Phase I Functionalization of Compounds, Cytochrome P450, Metabolism of Lipids, Fatty Acid Metabolism, Metabolism of Amino Acids, and the Complement Cascade. Scavenger receptor pathways (including liver sinusoidal endothelial genes such as STAB2) and Metallothioneins Bind Metals are also reduced.
+
+GSEA and ORA agree: **tumors gain proliferation and lose hepatocyte identity**.
+
+### 5.4 Linking pathways to candidate genes
+
+For each significantly activated Hallmark pathway, the **leading-edge genes** (the genes driving the enrichment signal) were extracted and matched to the robust upregulated gene list.
+
+**134 of 1,842 robust upregulated genes** are leading-edge genes of at least one activated Hallmark pathway. Examples:
+
+| Gene | log2FC | Pathway(s) | Note |
+|---|---|---|---|
+| DKK1 | 5.76 | Wnt-beta Catenin Signaling | Secreted Wnt regulator; has been developed as an antibody target in other cancers |
+| DKK4 | 4.85 | Wnt-beta Catenin Signaling | Wnt target gene |
+| EGF | 4.65 | G2-M Checkpoint | Growth factor |
+| MYBL2 | 4.54 | E2F Targets; G2-M Checkpoint | Cell-cycle transcription factor |
+| CDC20 | 4.25 | E2F Targets; G2-M Checkpoint; Myc Targets V1 | Mitotic regulator |
+
+This annotation is saved in `results/candidates_with_pathways.csv` and will be used to explain the biological role of the final candidate targets.
+
+### 5.5 Summary
+
+Pathway analysis confirms the gene-level findings with an independent method. HCC tumors show strong activation of cell proliferation, MYC and Wnt/β-catenin programs, and broad loss of normal hepatocyte metabolic functions. Suppression of immune and inflammatory pathways likely reflects both immune-rich diseased adjacent liver and tissue-handling effects in normal samples. Proliferation and Wnt/β-catenin genes form a biologically coherent pool of candidates for survival analysis.
+
+---
+
 ## 8. Limitations
 
 - **Adjacent normal is not healthy liver.** Normal samples come from non-tumor tissue of cancer patients, often with cirrhosis or hepatitis. Some tumor-vs-normal differences may be underestimated.
 - **Bulk RNA-seq.** Each sample is a mixture of tumor, immune and stromal cells, so some signal may come from non-cancer cells, and tumor purity varies between samples.
 - **Imbalanced groups.** There are 371 tumors vs 50 normals.
 - **Tumor heterogeneity.** Some genes are extremely high in only a subset of tumors. Fold change alone can overstate how broadly a gene is overexpressed.
+- **Sample handling effects.** Stress-response genes in adjacent normal samples may partly reflect time between tissue removal and preservation, which can inflate apparent differences in inflammatory pathways.
 - **Short follow-up.** Median follow-up is 19.6 months. With 131 deaths among 365 patients, survival analysis is still reasonably powered, but long-term effects may be missed.
 - **mRNA ≠ protein ≠ dependency.** High mRNA expression does not guarantee high protein levels or that the tumor depends on the gene.
 
@@ -250,3 +328,8 @@ Several genes with established roles in HCC were recovered without prior selecti
 4. Muzellec, B., Teleńczuk, M., Cabeli, V. & Andreux, M. PyDESeq2: a python package for bulk RNA-seq differential expression analysis. *Bioinformatics* 39, btad547 (2023).
 5. Benjamini, Y. & Hochberg, Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. *Journal of the Royal Statistical Society: Series B* 57, 289–300 (1995).
 6. Zhu, A., Ibrahim, J. G. & Love, M. I. Heavy-tailed prior distributions for sequence count data: removing the noise and preserving large differences. *Bioinformatics* 35, 2084–2092 (2019).
+7. Subramanian, A. et al. Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. *PNAS* 102, 15545–15550 (2005).
+8. Liberzon, A. et al. The Molecular Signatures Database (MSigDB) hallmark gene set collection. *Cell Systems* 1, 417–425 (2015).
+9. Fang, Z., Liu, X. & Peltz, G. GSEApy: a comprehensive package for performing gene set enrichment analysis in Python. *Bioinformatics* 39, btac757 (2023).
+10. Milacic, M. et al. The Reactome Pathway Knowledgebase 2024. *Nucleic Acids Research* 52, D672–D678 (2024).
+11. Kuleshov, M. V. et al. Enrichr: a comprehensive gene set enrichment analysis web server 2016 update. *Nucleic Acids Research* 44, W90–W97 (2016).
